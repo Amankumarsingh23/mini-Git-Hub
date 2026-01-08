@@ -307,6 +307,52 @@ void merge(const string& targetBranch) {
     commit("Merged branch " + targetBranch + " into " + currentBranch);
 }
 
+void diff(const string& commit1, const string& commit2) {
+    ifstream in1(COMMITS_DIR + "/" + commit1);
+    ifstream in2(COMMITS_DIR + "/" + commit2);
+    
+    if (!in1 || !in2) {
+        cout << "One or both commit hashes not found." << endl;
+        return;
+    }
+
+    unordered_map<string, string> map1, map2;
+    string line;
+
+    // Helper to extract file:hash pairs into a map
+    auto populateMap = [](ifstream& in, unordered_map<string, string>& m) {
+        string l;
+        while (getline(in, l)) {
+            if (l.find(":") != string::npos && l.find("message:") != 0 && 
+                l.find("parent:") != 0 && l.find("branch:") != 0) {
+                size_t sep = l.find(":");
+                m[l.substr(0, sep)] = l.substr(sep + 1);
+            }
+        }
+    };
+
+    populateMap(in1, map1);
+    populateMap(in2, map2);
+
+    cout << "### Diff: " << commit1 << " <-> " << commit2 << " ###" << endl;
+
+    // 1. Check for changes and removals (comparing Map1 to Map2)
+    for (auto const& [file, hash1] : map1) {
+        if (map2.find(file) == map2.end()) {
+            cout << "[-] " << file << " (Removed in second commit)" << endl;
+        } else if (map2[file] != hash1) {
+            cout << "[M] " << file << " (Modified/Content Changed)" << endl;
+        }
+    }
+
+    // 2. Check for additions (comparing Map2 to Map1)
+    for (auto const& [file, hash2] : map2) {
+        if (map1.find(file) == map1.end()) {
+            cout << "[+] " << file << " (Added in second commit)" << endl;
+        }
+    }
+}
+
 
 int main(int argc, char* argv[]) {
     if (argc < 2) {
@@ -350,6 +396,9 @@ int main(int argc, char* argv[]) {
     }
     else if (command == "merge" && argc >= 3) {
         merge(argv[2]);
+    }
+    else if (command == "diff" && argc >= 4) {
+        diff(argv[2], argv[3]);
     }
 
     else {
