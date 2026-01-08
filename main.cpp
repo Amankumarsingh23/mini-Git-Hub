@@ -142,8 +142,10 @@ void commit(const string& message) {
     timestamp.pop_back();
 
     string metadata = "message: " + message + "\n" +
-                      "parent: " + parent + "\n" +
-                      "branch: " + branch + "\n";
+                  "parent: " + parent + "\n" +
+                  "branch: " + branch + "\n" +
+                  "timestamp: " + timestamp + "\n";
+
 
     // 3. Hash the entire commit (Metadata + Files) to get a unique Commit ID
     string commitHash = Hash(metadata + commitData);
@@ -161,6 +163,17 @@ void commit(const string& message) {
     cout << "Commit created: " << commitHash << endl;
 }
 
+void status() {
+    ifstream indexIn(INDEX_FILE);
+    string line;
+    cout << "Staged files:\n";
+    while (getline(indexIn, line)) {
+        cout << "  " << line << endl;
+    }
+}
+
+
+
 int main(int argc, char* argv[]) {
     if (argc < 2) {
         cout << "Usage: ./minigit <command>" << endl;
@@ -173,7 +186,9 @@ int main(int argc, char* argv[]) {
         init();
     } 
     else if (command == "add" && argc >= 3) {
-        add(argv[2]); // argv[2] is the filename you type
+         for (int i = 2; i < argc; i++) {
+        add(argv[i]);
+    }
     } 
     else if (command == "commit" && argc >= 4 && string(argv[2]) == "-m") {
 
@@ -184,6 +199,11 @@ int main(int argc, char* argv[]) {
     }
     commit(msg);
     }
+    
+    else if (command == "status") {
+    status();
+    }
+
     else {
         cout << "Unknown command." << endl;
     }
