@@ -3,6 +3,7 @@
 #include <fstream>    // Used to create/read files
 #include <chrono>
 #include <ctime>
+#include <unordered_map>
 
 
 using namespace std;
@@ -211,6 +212,100 @@ void status() {
     }
 }
 
+// branching 
+
+bool branchExists(const string& branchName) {
+    ifstream in(BRANCHES_FILE);
+    string line;
+    while (getline(in, line)) {
+        size_t sep = line.find(":");
+        if (line.substr(0, sep) == branchName) {
+            return true;
+        }
+    }
+    return false;
+}
+
+
+void createBranch(const string& branchName) {
+    if (branchExists(branchName)) {
+        cout << "Branch already exists: " << branchName << endl;
+        return;
+    }
+
+    string currentCommitHash = getBranchHead(getCurrentBranch());
+
+    ofstream branchesOut(BRANCHES_FILE, ios::app);
+    branchesOut << branchName << ":" << currentCommitHash << "\n";
+
+    cout << "Created branch '" << branchName
+         << "' at commit " << currentCommitHash << endl;
+}
+
+
+void checkout(const string& target) {
+    if (!branchExists(target)) {
+        cout << "Branch not found: " << target << endl;
+        return;
+    }
+
+    ofstream headFile(HEAD_FILE, ios::trunc);
+    headFile << target;
+
+    cout << "Switched to branch: " << target << endl;
+}
+
+
+void merge(const string& targetBranch) {
+    string currentBranch = getCurrentBranch();
+    string currentCommit = getBranchHead(currentBranch);
+    string targetCommit = getBranchHead(targetBranch);
+
+    if (targetCommit == "null") {
+        cout << "Branch not found or no commits to merge." << endl;
+        return;
+    }
+
+    unordered_map<string, string> mergedFiles;
+    string line;
+
+    // 1. Read files from the target branch (the branch you are pulling FROM)
+    ifstream targetIn(COMMITS_DIR + "/" + targetCommit);
+    while (getline(targetIn, line)) {
+        // Skip metadata lines, only look for "filename:hash"
+        if (line.find(":") != string::npos && line.find("message:") != 0 && 
+            line.find("parent:") != 0 && line.find("branch:") != 0) {
+            size_t sep = line.find(":");
+            mergedFiles[line.substr(0, sep)] = line.substr(sep + 1);
+        }
+    }
+
+    // 2. Read files from the current branch and check for conflicts
+    ifstream currentIn(COMMITS_DIR + "/" + currentCommit);
+    while (getline(currentIn, line)) {
+        if (line.find(":") != string::npos && line.find("message:") != 0 && 
+            line.find("parent:") != 0 && line.find("branch:") != 0) {
+            size_t sep = line.find(":");
+            string file = line.substr(0, sep);
+            string hash = line.substr(sep + 1);
+
+            // Conflict Check: If file exists in both but hashes are different
+            if (mergedFiles.count(file) && mergedFiles[file] != hash) {
+                cout << "CONFLICT: Both branches modified " << file << ". Keeping current version." << endl;
+            }
+            mergedFiles[file] = hash; // Current branch takes priority in this simple version
+        }
+    }
+
+    // 3. Write the merged result to the Staging Area (Index)
+    ofstream indexOut(INDEX_FILE, ios::trunc);
+    for (const auto& [file, hash] : mergedFiles) {
+        indexOut << file << ":" << hash << endl;
+    }
+
+    // 4. Automatically create a "Merge Commit"
+    commit("Merged branch " + targetBranch + " into " + currentBranch);
+}
 
 
 int main(int argc, char* argv[]) {
@@ -245,6 +340,16 @@ int main(int argc, char* argv[]) {
 
     else if (command == "status") {
     status();
+    }
+    else if (command == "branch" && argc >= 3) {
+        createBranch(argv[2]);
+    }
+
+    else if (command == "checkout" && argc >= 3) {
+        checkout(argv[2]);
+    }
+    else if (command == "merge" && argc >= 3) {
+        merge(argv[2]);
     }
 
     else {
